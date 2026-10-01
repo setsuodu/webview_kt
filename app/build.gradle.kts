@@ -55,4 +55,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation("androidx.appcompat:appcompat:1.6.1")
+
+    // 二维码扫描（自带相机权限申请 + 扫描界面，无需 Google Play 服务）
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 }

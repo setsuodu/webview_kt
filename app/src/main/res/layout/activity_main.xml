@@ -3,14 +3,23 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:fitsSystemWindows="true"> <!-- 1. 在最外层加上这一行，让整个布局避开刘海和状态栏 -->
+    android:fitsSystemWindows="true"> <!-- 让整个布局避开刘海和状态栏 -->
 
-        <!-- 顶部控制栏 -->
-        <LinearLayout
+    <!-- 顶部控制栏 -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
         android:padding="8dp">
+
+        <Button
+            android:id="@+id/btnHome"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:text="🏠" />
 
         <EditText
             android:id="@+id/etUrl"
@@ -18,28 +27,44 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="输入网址"
-            android:inputType="textUri"
-            android:imeOptions="actionGo"/>
+            android:imeOptions="actionGo"
+            android:inputType="textUri" />
+
+        <Button
+            android:id="@+id/btnScan"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:text="扫码" />
 
         <Button
             android:id="@+id/btnGo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:minWidth="0dp"
             android:text="前往" />
-        </LinearLayout>
 
-            <!-- 加载进度条 -->
-        <ProgressBar
+        <Button
+            android:id="@+id/btnMore"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:text="⋯" />
+    </LinearLayout>
+
+    <!-- 加载进度条 -->
+    <ProgressBar
         android:id="@+id/progressBar"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="4dp"
         android:visibility="gone" />
 
-            <!-- 网页核心组件 -->
-        <WebView
+    <!-- 网页核心组件 -->
+    <WebView
         android:id="@+id/webView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    </LinearLayout>
+</LinearLayout>
