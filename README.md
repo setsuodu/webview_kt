@@ -159,7 +159,109 @@ layout: activity_sniff_list.xml / item_sniff.xml
 
 ## 相关项目
 
-- 片库 / 服务端爬虫与 m3u8 入库：见 [AnimeNetflix](https://github.com/setsuodu/AnimeNetflix)（后端抓取，不在本 App 内做站库爬虫）。
+- 服务端解析下载（B 站 / YouTube / m3u8 等）：[FetchVideo](https://github.com/setsuodu/FetchVideo) → `Service/`
+- 片库 / 定时爬虫入库：[AnimeNetflix](https://github.com/setsuodu/AnimeNetflix)
+
+---
+
+## 与 FetchVideo Service 对接（计划）
+
+**原则：** Service 继续独立 Docker 部署；`webview_kt` 只当 HTTP 客户端。不把 Service 源码塞进本仓库。
+
+### 分工
+
+| 场景 | 谁干 |
+|------|------|
+| 页面里扫到的直链 mp4 / 简单文件 | App 本地 `DownloadManager` |
+| B 站 / YouTube / 需 ffmpeg 的 m3u8 | **FetchVideo Service** 解析并下载到服务器目录 |
+| 用户要拿到手机上的文件 | App 用 Service 返回的 **缓存 URL** 再走本地下载（或系统浏览器打开） |
+
+### App 侧（webview_kt）
+
+设置项增加：
+
+- `fetch_service_base`：例如 `http://192.168.1.10:8080`（可空 = 不启用服务端）
+
+流程建议：
+
+1. 用户点「服务端下载」或嗅探列表里对复杂链接选「提交到服务器」
+2. `POST {base}/api/jobs`（或扩展现有 `api/Route/check`）提交页面 URL
+3. 轮询 `GET {base}/api/jobs/{id}` 直到 `status=done|failed`
+4. `done` 时响应里带 **`cacheUrl`**（公网/局域网可 GET 的地址）
+5. App 调用现有 `startDownload(cacheUrl, …)` 拉到手机，进入下载列表
+
+### Service 侧（FetchVideo）建议 API
+
+已有能力可参考：
+
+- `GET /api/Route/check?url=` — 按平台分流 B 站 / YT / m3u8（见 `RouteController`）
+- `POST /api/Download/download` — 直链存到 `/app/downloads`
+
+**建议新增（给 App 友好的任务模型）：**
+
+```http
+POST /api/jobs
+Content-Type: application/json
+
+{ "url": "https://www.bilibili.com/video/BVxxxx", "callbackUrl": null }
+
+→ 202 { "jobId": "uuid", "status": "queued" }
+```
+
+```http
+GET /api/jobs/{jobId}
+
+→ 200 {
+  "jobId": "uuid",
+  "status": "queued|running|done|failed",
+  "progress": 0-100,
+  "error": null,
+  "fileName": "title.mp4",
+  "cacheUrl": "http://<host>:8080/downloads/title.mp4"
+}
+```
+
+`cacheUrl` 约定：
+
+- 文件落在 Service 的 `DownloadPath`（如 `/app/downloads`）
+- 通过已有静态文件或 `wwwroot` / `/downloads/` 映射对外提供
+- **必须是 App 能访问的绝对 URL**（用请求的 Host 拼，或配置 `PublicBaseUrl`）
+- 不要只返回容器内路径 `/app/downloads/xxx`
+
+可选：
+
+```http
+POST /api/jobs/{jobId}/cancel
+```
+
+**推送（可选，非必须）：**
+
+- 第一期：App 轮询即可  
+- 第二期：`callbackUrl` Webhook，或 MQTT / SSE；手机在后台不可靠，仍以轮询+用户打开列表刷新为主  
+
+### 安全（内网也建议做）
+
+- 设置里可配简单 Token：`Authorization: Bearer <token>`  
+- `cacheUrl` 仅局域网或带短时签名，避免裸奔公网盘  
+
+### 实现顺序（跨仓库）
+
+**FetchVideo Service**
+
+1. 静态托管 `/downloads` → 可浏览器直接打开文件  
+2. `POST/GET /api/jobs`（内部复用 `RouteController` / Bili / YT 逻辑）  
+3. 完成后写入 `cacheUrl = {PublicBaseUrl}/downloads/{fileName}`  
+
+**webview_kt**
+
+1. 设置：Service Base URL  
+2. 提交 job + 轮询  
+3. `done` → `startDownload(cacheUrl)`  
+
+### README 交叉引用
+
+- 本仓库：本节  
+- FetchVideo：在其 README 增加「Android 客户端 webview_kt 可调用 `/api/jobs`」一句即可  
 
 ---
 
