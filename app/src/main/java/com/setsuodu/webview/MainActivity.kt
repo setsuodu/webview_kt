@@ -1,28 +1,44 @@
 package com.setsuodu.webview
 
+import android.app.DownloadManager
+import androidx.core.content.ContextCompat
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.pm.PackageManager
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.util.Log
 import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.text.InputType
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.webkit.CookieManager
+import android.webkit.URLUtil
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
-import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -43,6 +59,38 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "已取消扫描", Toast.LENGTH_SHORT).show()
         } else {
             handleScanResult(content)
+        }
+    }
+
+    // 存储权限（Android 9 及以下写公共目录需要）
+    private var pendingDownload: (() -> Unit)? = null
+    private val storagePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            val ok = result.values.all { it }
+            Log.d("WebViewDL", "storage perm result=$result")
+            if (ok) {
+                pendingDownload?.invoke()
+            } else {
+                Toast.makeText(this, "需要存储权限才能下载到公共目录", Toast.LENGTH_LONG).show()
+            }
+            pendingDownload = null
+        }
+
+        /** 系统下载完成广播 → 同步列表状态 */
+    private val downloadCompleteReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (intent?.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
+            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+            Log.d("WebViewDL", "ACTION_DOWNLOAD_COMPLETE id=$id")
+            DownloadStore.syncWithDownloadManager(this@MainActivity)
+            // 再查一次该 id 的最终状态给个 Toast
+            val rec = DownloadStore.getHistory(this@MainActivity).firstOrNull { it.id == id }
+            when (rec?.status) {
+                DownloadStore.STATUS_SUCCESS ->
+                    Toast.makeText(this@MainActivity, "下载完成：${rec.fileName}", Toast.LENGTH_SHORT).show()
+                DownloadStore.STATUS_FAILED ->
+                    Toast.makeText(this@MainActivity, "下载失败：${rec.fileName}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -94,6 +142,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // ★ 下载监听：使用设置中的保存路径，并写入下载列表
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+            val run = { startDownload(url, userAgent, contentDisposition, mimeType) }
+            val miss = PermissionHelper.missingStorage(this)
+            if (miss.isEmpty()) {
+                run()
+            } else {
+                pendingDownload = run
+                Toast.makeText(this, "需要存储权限，请允许后自动开始下载", Toast.LENGTH_SHORT).show()
+                storagePermissionLauncher.launch(miss)
+            }
+        }
+
         // 4. 绑定点击事件和键盘“前往”事件
         btnGo.setOnClickListener { loadUrlFromInput() }
         btnScan.setOnClickListener { startScan() }
@@ -122,6 +183,102 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+
+        // 监听系统下载完成
+        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(downloadCompleteReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(downloadCompleteReceiver, filter)
+        }
+        Log.d("WebViewDL", "download complete receiver registered")
+
+        // 启动时检查存储权限（老系统）
+        val miss = PermissionHelper.missingStorage(this)
+        if (miss.isNotEmpty()) {
+            Log.d("WebViewDL", "request storage on start: ${miss.joinToString()}")
+            storagePermissionLauncher.launch(miss)
+        }
+    }
+
+    override fun onDestroy() {
+        try {
+            unregisterReceiver(downloadCompleteReceiver)
+        } catch (_: Exception) {
+        }
+        super.onDestroy()
+    }
+
+    /** 使用 DownloadManager 下载，路径取自设置（默认主存 Download） */
+    private fun startDownload(
+        url: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?
+    ) {
+        try {
+            val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+            val dir = DownloadStore.ensureDir(this)
+            val destFile = File(dir, fileName)
+
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                setMimeType(mimeType)
+                if (!userAgent.isNullOrBlank()) {
+                    addRequestHeader("User-Agent", userAgent)
+                }
+                val cookies = CookieManager.getInstance().getCookie(url)
+                if (!cookies.isNullOrEmpty()) {
+                    addRequestHeader("Cookie", cookies)
+                }
+                setDescription("正在下载 $fileName")
+                setTitle(fileName)
+                setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                )
+                setAllowedOverMetered(true)
+                setAllowedOverRoaming(true)
+
+                // 优先写到用户配置的目录
+                val defaultDl = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS
+                ).absolutePath
+                if (dir.absolutePath == defaultDl || dir.absolutePath.startsWith(defaultDl + File.separator)) {
+                    // 公共 Download 或其子目录：用 public API
+                    val sub = if (dir.absolutePath == defaultDl) {
+                        fileName
+                    } else {
+                        dir.absolutePath.removePrefix(defaultDl + File.separator) +
+                            File.separator + fileName
+                    }
+                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, sub)
+                } else {
+                    // 其它路径：用 file:// URI（需目录可写）
+                    setDestinationUri(Uri.fromFile(destFile))
+                }
+            }
+
+            val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            val id = dm.enqueue(request)
+            Log.d("WebViewDL", "enqueue id=$id file=$fileName dir=${dir.absolutePath} url=$url")
+
+            DownloadStore.addRecord(
+                this,
+                DownloadStore.Record(
+                    id = id,
+                    url = url,
+                    fileName = fileName,
+                    path = destFile.absolutePath,
+                    mimeType = mimeType ?: "",
+                    time = System.currentTimeMillis(),
+                    status = "pending"
+                )
+            )
+            Toast.makeText(this, "开始下载：$fileName\n保存到：${dir.absolutePath}", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "下载失败: ${e.message}", Toast.LENGTH_LONG).show()
+            e.printStackTrace()
+        }
     }
 
     // 格式化输入的网址并加载
@@ -180,13 +337,13 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- 主页 / 菜单 / 设置 ----------
 
-    private fun homeUrl(): String = prefs.getString(KEY_HOME, DEFAULT_HOME) ?: DEFAULT_HOME
+    private fun homeUrl(): String = DownloadStore.homeUrl(this)
 
     // 规范化主页地址：空 -> 默认；about:blank/_blank -> 空白页；缺协议自动补 https://
     private fun normalizeHome(input: String): String {
         val t = input.trim()
         return when {
-            t.isEmpty() -> DEFAULT_HOME
+            t.isEmpty() -> DownloadStore.DEFAULT_HOME
             t.equals("about:blank", true) || t.equals("_blank", true) -> "about:blank"
             t.startsWith("http://", true) || t.startsWith("https://", true) -> t
             else -> "https://$t"
@@ -196,10 +353,12 @@ class MainActivity : AppCompatActivity() {
     private fun showMoreMenu(anchor: View) {
         PopupMenu(this, anchor).apply {
             menu.add(0, MENU_BOOKMARK, 0, "书签")
-            menu.add(0, MENU_SETTINGS, 1, "设置")
+            menu.add(0, MENU_DOWNLOADS, 1, "下载列表")
+            menu.add(0, MENU_SETTINGS, 2, "设置")
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     MENU_BOOKMARK -> Toast.makeText(this@MainActivity, "书签：敬请期待", Toast.LENGTH_SHORT).show()
+                    MENU_DOWNLOADS -> startActivity(Intent(this@MainActivity, DownloadListActivity::class.java))
                     MENU_SETTINGS -> showSettingsDialog()
                 }
                 true
@@ -208,43 +367,74 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 设置：目前只有“默认主页”
+    // 设置：默认主页 + 下载保存路径
     private fun showSettingsDialog() {
         val density = resources.displayMetrics.density
-        val input = EditText(this).apply {
-            hint = DEFAULT_HOME
+        val padH = (20 * density).toInt()
+        val padV = (8 * density).toInt()
+
+        val labelHome = TextView(this).apply {
+            text = "默认主页"
+            setPadding(0, 0, 0, (4 * density).toInt())
+        }
+        val inputHome = EditText(this).apply {
+            hint = DownloadStore.DEFAULT_HOME
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine()
             setText(homeUrl())
             setSelection(text.length)
         }
-        val container = FrameLayout(this).apply {
-            val h = (20 * density).toInt()
-            setPadding(h, (8 * density).toInt(), h, 0)
-            addView(input)
+
+        val labelDir = TextView(this).apply {
+            text = "下载保存路径（留空=主存储/Download）"
+            setPadding(0, (12 * density).toInt(), 0, (4 * density).toInt())
         }
+        val inputDir = EditText(this).apply {
+            hint = DownloadStore.defaultDownloadDir()
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine()
+            setText(DownloadStore.downloadDir(this@MainActivity))
+            setSelection(text.length)
+        }
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padH, padV, padH, 0)
+            addView(labelHome)
+            addView(inputHome)
+            addView(labelDir)
+            addView(inputDir)
+        }
+
         AlertDialog.Builder(this)
-            .setTitle("设置 · 默认主页")
-            .setMessage("首次启动及点击 🏠 时打开。填 about:blank 为空白页。")
-            .setView(container)
+            .setTitle("设置")
+            .setMessage("主页：首次启动及点击 🏠 时打开。填 about:blank 为空白页。\n下载路径：默认系统 Download 目录。")
+            .setView(root)
             .setPositiveButton("保存") { _, _ ->
-                val url = normalizeHome(input.text.toString())
-                prefs.edit().putString(KEY_HOME, url).apply()
-                Toast.makeText(this, "已保存：$url", Toast.LENGTH_SHORT).show()
+                val url = normalizeHome(inputHome.text.toString())
+                DownloadStore.setHomeUrl(this, url)
+                val dir = inputDir.text.toString().trim()
+                DownloadStore.setDownloadDir(this, dir)
+                val shownDir = if (dir.isEmpty()) DownloadStore.defaultDownloadDir() else dir
+                Toast.makeText(this, "已保存\n主页：$url\n下载：$shownDir", Toast.LENGTH_LONG).show()
             }
             .setNeutralButton("恢复默认") { _, _ ->
-                prefs.edit().putString(KEY_HOME, DEFAULT_HOME).apply()
-                Toast.makeText(this, "已恢复：$DEFAULT_HOME", Toast.LENGTH_SHORT).show()
+                DownloadStore.setHomeUrl(this, DownloadStore.DEFAULT_HOME)
+                DownloadStore.setDownloadDir(this, "")
+                Toast.makeText(
+                    this,
+                    "已恢复默认\n主页：${DownloadStore.DEFAULT_HOME}\n下载：${DownloadStore.defaultDownloadDir()}",
+                    Toast.LENGTH_LONG
+                ).show()
             }
             .setNegativeButton("取消", null)
             .show()
     }
 
     companion object {
-        private const val KEY_HOME = "home_url"
-        private const val DEFAULT_HOME = "https://www.baidu.com"
         private const val MENU_BOOKMARK = 1
         private const val MENU_SETTINGS = 2
+        private const val MENU_DOWNLOADS = 3
 
         // 例如 www.baidu.com/path?x=1
         private val DOMAIN_REGEX =
