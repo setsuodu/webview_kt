@@ -11,9 +11,8 @@ name: Build Release APK
 
 on:
   push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
+    tags:
+      - "v*"   # 仅 tag 触发，例如 v1.0.0 / v1.2.3
   workflow_dispatch:
 
 jobs:
