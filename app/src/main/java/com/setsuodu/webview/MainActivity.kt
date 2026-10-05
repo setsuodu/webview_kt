@@ -17,7 +17,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.webkit.CookieManager
@@ -44,6 +46,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var etUrl: EditText
+    private lateinit var btnClearUrl: Button
     private lateinit var btnGo: Button
     private lateinit var btnScan: Button
     private lateinit var btnHome: Button
@@ -101,6 +104,7 @@ class MainActivity : AppCompatActivity() {
         // 初始化视图
         webView = findViewById(R.id.webView)
         etUrl = findViewById(R.id.etUrl)
+        btnClearUrl = findViewById(R.id.btnClearUrl)
         btnGo = findViewById(R.id.btnGo)
         btnScan = findViewById(R.id.btnScan)
         btnHome = findViewById(R.id.btnHome)
@@ -160,6 +164,10 @@ class MainActivity : AppCompatActivity() {
         btnScan.setOnClickListener { startScan() }
         btnHome.setOnClickListener { webView.loadUrl(homeUrl()) }
         btnMore.setOnClickListener { showMoreMenu(it) }
+        btnClearUrl.setOnClickListener {
+            etUrl.setText("")
+            etUrl.requestFocus()
+        }
         etUrl.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO) {
                 loadUrlFromInput()
@@ -168,6 +176,16 @@ class MainActivity : AppCompatActivity() {
                 false
             }
         }
+        // 地址栏有内容时显示清空按钮，清空后隐藏
+        etUrl.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                btnClearUrl.visibility = if (s.isNullOrEmpty()) View.GONE else View.VISIBLE
+            }
+        })
+        // 初始状态：根据当前文本决定是否显示
+        btnClearUrl.visibility = if (etUrl.text.isNullOrEmpty()) View.GONE else View.VISIBLE
 
         // 默认主页
         webView.loadUrl(homeUrl())
