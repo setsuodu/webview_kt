@@ -265,6 +265,43 @@ POST /api/jobs/{jobId}/cancel
 
 ---
 
+## CI：Release APK
+
+GitHub Actions：`.github/workflows/build-release-apk.yml`
+
+- 触发：`main`/`master` 推送、PR、手动 `workflow_dispatch`
+- 任务：`./gradlew assembleRelease`，上传 `webview-release-apk` Artifact
+- 签名方案（`app/build.gradle.kts`）：**v1 + v2 + v3 + v4** 全部开启  
+  - v1：兼容旧机  
+  - v2/v3：现代 Android 安装校验（缺了容易装不上）  
+  - v4：额外生成 `.apk.idsig`，便于增量安装  
+
+### 签名密钥
+
+| 场景 | 行为 |
+| --- | --- |
+| 未配置 Secrets | 使用 `~/.android/debug.keystore`（可安装测试，**勿当正式发布**） |
+| 配置 Secrets | 使用正式 keystore 签名 |
+
+可选 Secrets：
+
+1. `KEYSTORE_BASE64` — `base64 -w0 your-release.jks`
+2. `KEYSTORE_PASSWORD`
+3. `KEY_ALIAS`
+4. `KEY_PASSWORD`
+
+本地也可在 `gradle.properties` 或环境变量里设 `KEYSTORE_PATH` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`。
+
+构建后可用：
+
+```bash
+apksigner verify -v --print-certs app-release.apk
+```
+
+应能看到 `Verified using v2 scheme` / `v3 scheme`。
+
+---
+
 ## License
 
 未指定则默认仅供个人学习使用；提交到公开仓库前请自行补充许可证。
