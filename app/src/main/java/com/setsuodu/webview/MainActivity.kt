@@ -187,8 +187,10 @@ class MainActivity : AppCompatActivity() {
         // 初始状态：根据当前文本决定是否显示
         btnClearUrl.visibility = if (etUrl.text.isNullOrEmpty()) View.GONE else View.VISIBLE
 
-        // 默认主页
-        webView.loadUrl(homeUrl())
+        // 优先打开外部传入的链接（作为默认浏览器时），否则加载默认主页
+        if (!handleViewIntent(intent)) {
+            webView.loadUrl(homeUrl())
+        }
 
         // 5. 处理手机的“返回键”：优先网页后退，退无可退时再退出 App
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -297,6 +299,24 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "下载失败: ${e.message}", Toast.LENGTH_LONG).show()
             e.printStackTrace()
         }
+    }
+
+    /** 处理外部传入的 http(s) 链接（作为默认浏览器 / 打开方式时） */
+    private fun handleViewIntent(intent: Intent?): Boolean {
+        val data = intent?.data ?: return false
+        val url = data.toString()
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            etUrl.setText(url)
+            webView.loadUrl(url)
+            return true
+        }
+        return false
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleViewIntent(intent)
     }
 
     // 格式化输入的网址并加载
