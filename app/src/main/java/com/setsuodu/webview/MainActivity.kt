@@ -130,11 +130,11 @@ class MainActivity : AppCompatActivity() {
             loadWithOverviewMode = true
         }
 
-        // 2. 防止跳转到系统自带浏览器（关键！）
+        // 2. http(s) 由 WebView 自己加载；intent / market / tel 等交给系统或外部 App
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                // 返回 false 表示由当前的 WebView 自己处理这个 URL，不上交给系统
-                return false
+                val url = request?.url?.toString() ?: return false
+                return handleSpecialUrl(view, url)
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -309,6 +309,74 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "下载失败: ${e.message}", Toast.LENGTH_LONG).show()
             e.printStackTrace()
+        }
+    }
+
+    /**
+     * 处理非 http(s) 链接：intent://、market://、tel:、mailto:、自定义 scheme 等。
+     * @return true 表示已拦截并由本方法处理；false 交给 WebView 继续加载。
+     */
+    private fun handleSpecialUrl(view: WebView?, url: String): Boolean {
+        val uri = try {
+            Uri.parse(url)
+        } catch (_: Exception) {
+            return false
+        }
+        val scheme = uri.scheme?.lowercase() ?: return false
+        if (scheme == "http" || scheme == "https" || scheme == "about" || scheme == "data" || scheme == "file") {
+            return false
+        }
+
+        try {
+            if (scheme == "intent") {
+                val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                    component = null
+                    selector = null
+                }
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                    return true
+                }
+                // 无对应 App：优先 browser_fallback_url，否则尝试应用市场
+                val fallback = intent.getStringExtra("browser_fallback_url")
+                if (!fallback.isNullOrBlank()) {
+                    view?.loadUrl(fallback)
+                    return true
+                }
+                val pkg = intent.`package`
+                if (!pkg.isNullOrBlank()) {
+                    try {
+                        startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("market://details?id=$pkg")
+                            )
+                        )
+                        return true
+                    } catch (_: Exception) {
+                        Toast.makeText(this, "未安装可处理的应用", Toast.LENGTH_SHORT).show()
+                        return true
+                    }
+                }
+                Toast.makeText(this, "未安装可处理的应用", Toast.LENGTH_SHORT).show()
+                return true
+            }
+
+            // market / tel / mailto / sms / 其它自定义 scheme
+            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+            }
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+            } else {
+                Toast.makeText(this, "未安装可处理的应用", Toast.LENGTH_SHORT).show()
+            }
+            return true
+        } catch (e: Exception) {
+            Log.w("WebView", "handleSpecialUrl failed: $url", e)
+            Toast.makeText(this, "无法打开链接: ${e.message}", Toast.LENGTH_SHORT).show()
+            return true
         }
     }
 
