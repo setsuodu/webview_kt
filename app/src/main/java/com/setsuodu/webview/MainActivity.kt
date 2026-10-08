@@ -1,7 +1,6 @@
 package com.setsuodu.webview
 
 import android.app.DownloadManager
-import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.pm.PackageManager
 import android.Manifest
@@ -28,8 +27,8 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
@@ -38,6 +37,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import java.io.File
@@ -46,11 +46,11 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var etUrl: EditText
-    private lateinit var btnClearUrl: Button
-    private lateinit var btnGo: Button
-    private lateinit var btnScan: Button
-    private lateinit var btnHome: Button
-    private lateinit var btnMore: Button
+    private lateinit var btnClearUrl: ImageButton
+    private lateinit var btnGo: ImageButton
+    private lateinit var btnScan: ImageButton
+    private lateinit var btnHome: ImageButton
+    private lateinit var btnMore: ImageButton
     private lateinit var progressBar: ProgressBar
 
     private val prefs by lazy { getSharedPreferences("settings", Context.MODE_PRIVATE) }
@@ -468,24 +468,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMoreMenu(anchor: View) {
-        PopupMenu(this, anchor).apply {
-            menu.add(0, MENU_ADD_BOOKMARK, 0, "添加书签")
-            menu.add(0, MENU_BOOKMARK, 1, "收藏夹")
-            menu.add(0, MENU_DOWNLOADS, 2, "下载列表")
-            menu.add(0, MENU_SETTINGS, 3, "设置")
-            setOnMenuItemClickListener { item ->
-                when (item.itemId) {
-                    MENU_ADD_BOOKMARK -> addCurrentPageBookmark()
-                    MENU_BOOKMARK -> bookmarkLauncher.launch(
-                        Intent(this@MainActivity, BookmarkListActivity::class.java)
-                    )
-                    MENU_DOWNLOADS -> startActivity(Intent(this@MainActivity, DownloadListActivity::class.java))
-                    MENU_SETTINGS -> showSettingsDialog()
-                }
-                true
-            }
-            show()
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, MENU_ADD_BOOKMARK, 0, "添加书签")
+            .setIcon(ContextCompat.getDrawable(this, R.drawable.ic_bookmark_add))
+        popup.menu.add(0, MENU_BOOKMARK, 1, "收藏夹")
+            .setIcon(ContextCompat.getDrawable(this, R.drawable.ic_bookmarks))
+        popup.menu.add(0, MENU_DOWNLOADS, 2, "下载列表")
+            .setIcon(ContextCompat.getDrawable(this, R.drawable.ic_download))
+        popup.menu.add(0, MENU_SETTINGS, 3, "设置")
+            .setIcon(ContextCompat.getDrawable(this, R.drawable.ic_settings))
+        // PopupMenu 默认不显示图标，反射强制开启
+        try {
+            val field = PopupMenu::class.java.getDeclaredField("mPopup")
+            field.isAccessible = true
+            val helper = field.get(popup)
+            val setForceShowIcon = helper.javaClass.getDeclaredMethod(
+                "setForceShowIcon",
+                Boolean::class.javaPrimitiveType
+            )
+            setForceShowIcon.invoke(helper, true)
+        } catch (_: Exception) {
         }
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                MENU_ADD_BOOKMARK -> addCurrentPageBookmark()
+                MENU_BOOKMARK -> bookmarkLauncher.launch(
+                    Intent(this@MainActivity, BookmarkListActivity::class.java)
+                )
+                MENU_DOWNLOADS -> startActivity(Intent(this, DownloadListActivity::class.java))
+                MENU_SETTINGS -> showSettingsDialog()
+            }
+            true
+        }
+        popup.show()
     }
 
     /** 把当前页面加入收藏夹 */

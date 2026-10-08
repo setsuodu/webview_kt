@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:fitsSystemWindows="true"> <!-- 让整个布局避开刘海和状态栏 -->
+    android:fitsSystemWindows="true">
 
     <!-- 顶部控制栏 -->
     <LinearLayout
@@ -11,15 +11,21 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="8dp">
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
 
-        <Button
+        <ImageButton
             android:id="@+id/btnHome"
             style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="🏠" />
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_home"
+            android:contentDescription="主页"
+            android:background="?attr/selectableItemBackgroundBorderless" />
 
         <EditText
             android:id="@+id/etUrl"
@@ -30,38 +36,50 @@
             android:imeOptions="actionGo"
             android:inputType="textUri" />
 
-        <Button
+        <ImageButton
             android:id="@+id/btnClearUrl"
             style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:paddingLeft="4dp"
-            android:paddingRight="4dp"
-            android:text="✕"
-            android:visibility="gone" />
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:padding="6dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_clear"
+            android:contentDescription="清空"
+            android:visibility="gone"
+            android:background="?attr/selectableItemBackgroundBorderless" />
 
-        <Button
+        <ImageButton
             android:id="@+id/btnScan"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="扫码" />
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_scan"
+            android:contentDescription="扫码"
+            android:background="?attr/selectableItemBackgroundBorderless" />
 
-        <Button
+        <ImageButton
             android:id="@+id/btnGo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="前往" />
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_go"
+            android:contentDescription="前往"
+            android:background="?attr/selectableItemBackgroundBorderless" />
 
-        <Button
+        <ImageButton
             android:id="@+id/btnMore"
             style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="⋯" />
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_more"
+            android:contentDescription="更多"
+            android:background="?attr/selectableItemBackgroundBorderless" />
     </LinearLayout>
 
     <!-- 加载进度条 -->
