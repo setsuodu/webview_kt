@@ -79,6 +79,17 @@ class MainActivity : AppCompatActivity() {
             pendingDownload = null
         }
 
+    // 从收藏夹返回：打开选中的 URL
+    private val bookmarkLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode != RESULT_OK) return@registerForActivityResult
+            val url = result.data?.getStringExtra(BookmarkListActivity.EXTRA_URL)
+            if (!url.isNullOrBlank()) {
+                webView.loadUrl(url)
+                etUrl.setText(url)
+            }
+        }
+
         /** 系统下载完成广播 → 同步列表状态 */
     private val downloadCompleteReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
@@ -390,12 +401,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun showMoreMenu(anchor: View) {
         PopupMenu(this, anchor).apply {
-            menu.add(0, MENU_BOOKMARK, 0, "书签")
-            menu.add(0, MENU_DOWNLOADS, 1, "下载列表")
-            menu.add(0, MENU_SETTINGS, 2, "设置")
+            menu.add(0, MENU_ADD_BOOKMARK, 0, "添加书签")
+            menu.add(0, MENU_BOOKMARK, 1, "收藏夹")
+            menu.add(0, MENU_DOWNLOADS, 2, "下载列表")
+            menu.add(0, MENU_SETTINGS, 3, "设置")
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
-                    MENU_BOOKMARK -> Toast.makeText(this@MainActivity, "书签：敬请期待", Toast.LENGTH_SHORT).show()
+                    MENU_ADD_BOOKMARK -> addCurrentPageBookmark()
+                    MENU_BOOKMARK -> bookmarkLauncher.launch(
+                        Intent(this@MainActivity, BookmarkListActivity::class.java)
+                    )
                     MENU_DOWNLOADS -> startActivity(Intent(this@MainActivity, DownloadListActivity::class.java))
                     MENU_SETTINGS -> showSettingsDialog()
                 }
@@ -403,6 +418,22 @@ class MainActivity : AppCompatActivity() {
             }
             show()
         }
+    }
+
+    /** 把当前页面加入收藏夹 */
+    private fun addCurrentPageBookmark() {
+        val url = webView.url?.trim().orEmpty()
+        if (url.isEmpty() || url == "about:blank") {
+            Toast.makeText(this, "当前没有可收藏的页面", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val title = webView.title?.trim().orEmpty().ifEmpty { url }
+        val added = BookmarkStore.add(this, title, url)
+        Toast.makeText(
+            this,
+            if (added) "已加入收藏夹" else "已更新收藏",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     // 设置：默认主页 + 下载保存路径
@@ -470,6 +501,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val MENU_ADD_BOOKMARK = 0
         private const val MENU_BOOKMARK = 1
         private const val MENU_SETTINGS = 2
         private const val MENU_DOWNLOADS = 3

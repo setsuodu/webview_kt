@@ -21,12 +21,15 @@
 | 删除 | 可勾选同时删除本地文件；进行中会 `dm.remove` |
 | 权限 | 存储（旧系统动态申请）；安装 APK 引导「未知应用」 |
 | 打开文件 | 优先 `DownloadManager.getUriForDownloadedFile` + FileProvider |
+| 收藏夹 | 菜单「添加书签」收藏当前页；「收藏夹」列表可打开/复制/删除；JSON 本地持久化 |
 
 ### 源码地图
 
 ```
 app/src/main/java/com/setsuodu/webview/
 ├── MainActivity.kt          # WebView、下载监听、菜单、设置、下载完成广播
+├── BookmarkListActivity.kt  # 收藏夹列表：打开 / 复制 / 删除
+├── BookmarkStore.kt         # 书签 JSON 持久化（SharedPreferences）
 ├── DownloadListActivity.kt  # 下载列表 UI、轮询同步、打开/分享/删除
 ├── DownloadStore.kt         # 路径配置 + 下载历史 JSON + 与 DM 同步
 ├── PermissionHelper.kt      # 存储 / 安装未知应用
@@ -34,13 +37,16 @@ app/src/main/java/com/setsuodu/webview/
 
 app/src/main/res/layout/
 ├── activity_main.xml
+├── activity_bookmark_list.xml
+├── item_bookmark.xml
 ├── activity_download_list.xml
 └── item_download.xml
 ```
 
 ### 菜单（主界面【…】）
 
-- 书签 — 占位（未实现）
+- **添加书签** — 收藏当前页面（标题 + URL，同 URL 则更新）
+- **收藏夹** — `BookmarkListActivity`：点击打开、长按复制/删除
 - **下载列表** — `DownloadListActivity`
 - **设置** — 默认主页 + 下载保存路径
 
@@ -150,7 +156,6 @@ layout: activity_sniff_list.xml / item_sniff.xml
 
 ## 其它 TODO
 
-- [ ] 书签（菜单已占位）  
 - [ ] 前进 / 多窗口  
 - [ ] 下载中通知点击跳转下载列表  
 - [ ] 自定义路径在 Android 10+ 的分区存储兼容说明（设置里提示优先用公共 Download）

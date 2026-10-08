@@ -51,6 +51,13 @@
             android:theme="@style/Theme.Webview" />
 
         <activity
+            android:name=".BookmarkListActivity"
+            android:exported="false"
+            android:label="收藏夹"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.Webview" />
+
+        <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
             android:screenOrientation="fullSensor"
             tools:replace="android:screenOrientation" />
